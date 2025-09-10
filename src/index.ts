@@ -144,21 +144,6 @@ export const buffer = () => createParser((value, path): Buffer => {
     throw new ParsingError(`[${path ?? ""}] cannot be converted to a Buffer`);
 });
 
-// export const file = (options?: {max?: number}) => createParser((value, path): File => {
-//     let file = new RAMFile();
-//     file.appendSync(buffer()(value, path));
-//     return file;
-// }, parser => (stream, path): Promise<File> => {
-//     let file: File = new RAMFile();
-//     stream.on("data", async (chunk: Buffer) => {
-//         await file.append(chunk);
-//         if (file.size > (options?.max ?? 256 * 1024 * 1024) && file instanceof RAMFile) {
-//             await file.save();
-//
-//         }
-//     });
-// });
-
 export const file = (options?: {max?: number}) => createParser((value, path): File => {
     if (value instanceof RAMFile || value instanceof TempFile) return value;
     let file = new RAMFile();
@@ -300,34 +285,18 @@ async function parseFormDataStream<T extends Record<string, unknown>>(
         });
 
         const fields: Record<string, any> = {};
-        // const files: Record<string, any> = {};
         const errors: Error[] = [];
-        // const tempDir = options.tempDir ?? os.tmpdir();
 
         busboy.on('field', (fieldname: string, value: string) => {
             fields[fieldname] = value;
         });
 
         busboy.on('file', (fieldname: string, fileStream: NodeJS.ReadableStream, info: { filename: string; mimeType: string }) => {
-            const { filename, mimeType } = info;
-            // let size = 0;
-            // let isLargeFile = false;
-            // let tempFilePath: string | null = null;
-            // let writeStream: fs.WriteStream | null = null;
+            const {filename} = info;
 
             let file: File = new RAMFile();
 
             fileStream.on('data', async (chunk: Buffer) => {
-                // size += data.length;
-                // if (size > maxSizeForMemory && !isLargeFile) {
-                //     isLargeFile = true;
-                //     tempFilePath = Path.join(tempDir, `upload-${Date.now()}-${filename}`);
-                //     writeStream = fs.createWriteStream(tempFilePath);
-                // }
-                //
-                // if (isLargeFile && writeStream) {
-                //     writeStream.write(data);
-                // }
                 await file.append(chunk);
                 if (file.size > (options?.maxFileMemory ?? 256 * 1024 * 1024) && file instanceof RAMFile) {
                     await file.save(Path.join(options.tempDir ?? os.tmpdir(), `${cryptoRandomString({length: 10, type: "url-safe"})}-${filename}`));
@@ -336,24 +305,6 @@ async function parseFormDataStream<T extends Record<string, unknown>>(
             });
 
             fileStream.on('end', () => {
-                // if (isLargeFile && writeStream && tempFilePath) {
-                //     writeStream.end();
-                //     files[fieldname] = {
-                //         filepath: tempFilePath,
-                //         size,
-                //         originalname: filename,
-                //         mimetype: mimeType
-                //     };
-                // } else {
-                //     const buffer = Buffer.alloc(size);
-                //     files[fieldname] = {
-                //         filepath: Path.join(tempDir, `temp-${Date.now()}-${filename}`),
-                //         buffer,
-                //         size,
-                //         originalname: filename,
-                //         mimetype: mimeType
-                //     };
-                // }
                 fields[fieldname] = file;
             });
 
@@ -371,31 +322,6 @@ async function parseFormDataStream<T extends Record<string, unknown>>(
                 reject(errors[0]);
                 return;
             }
-
-            // try {
-            //     const result: any = {};
-            //
-            //     for (const key in shape) {
-            //         if (key in fields) {
-            //             result[key] = shape[key](fields[key], `${path}.${key}`);
-            //         } else if (shape[key].name !== 'optional') {
-            //             throw new ParsingError(`[${path}.${key}] is required`);
-            //         }
-            //     }
-            //
-            //     if (!options.ignoreUnknown) {
-            //         const knownKeys = Object.keys(shape);
-            //         for (const key of Object.keys(fields)) {
-            //             if (!knownKeys.includes(key)) {
-            //                 throw new ParsingError(`[${path}.${key}] is not allowed`);
-            //             }
-            //         }
-            //     }
-            //
-            //     resolve(result as T);
-            // } catch (err) {
-            //     reject(err);
-            // }
 
             try {
                 resolve(object(shape, options)(fields, path));
@@ -454,44 +380,6 @@ export const object = <T extends Record<string, unknown>>(
     }
 });
 
-// export const object = <T extends Record<string, unknown>>(
-//     shape: { [K in keyof T]: Parser<T[K]> },
-//     options: { ignoreUnknown?: boolean } = { ignoreUnknown: true }
-// ): AsyncParser<T> => {
-//     return async (value, path) => {
-//         if (isStream(value)) {
-//             return (async () => {
-//                 try {
-//                     return await parseFormDataStream(value, shape, options, path);
-//                 }
-//                 catch (formDataError) {
-//                     return new Promise((resolve, reject) => {
-//                         let data = '';
-//                         value.on('data', chunk => {
-//                             data += chunk;
-//                         });
-//
-//                         value.on('end', () => {
-//                             try {
-//                                 const jsonData = JSON.parse(data);
-//                                 resolve(object(shape, options)(jsonData, path));
-//                             } catch (jsonError) {
-//                                 reject(new ParsingError(
-//                                     `[${path}] не удалось обработать как FormData или JSON: ${(formDataError as Error).message}\n\n${(jsonError as Error).message}`
-//                                 ));
-//                             }
-//                         });
-//
-//                         value.on('error', reject);
-//                     });
-//                 }
-//             })();
-//         }
-//
-//         return objectSync(shape, options)(value, path);
-//     };
-// };
-//
 // export const array = <T>(parser: Parser<T>, options: { min?: number; max?: number } = {}): Parser<T[]> =>
 //     (value, path) => {
 //         if (!Array.isArray(value)) {
