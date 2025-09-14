@@ -1,8 +1,9 @@
 import * as os from 'os';
 import * as fs from 'fs';
 import * as Path from 'path';
-import * as Busboy from 'busboy';
+import Busboy from 'busboy';
 import cryptoRandomString from "crypto-random-string";
+import { PassThrough } from 'stream';
 
 interface File {
     size: number;
@@ -90,6 +91,44 @@ export class ParsingError extends Error {
 export type RawParser<T> = (value: unknown, path?: string) => T;
 export type StreamParser<T> = (value: NodeJS.ReadableStream, path?: string) => Promise<T>;
 export type Parser<T> = RawParser<T> & {stream: StreamParser<T>};
+
+async function getBoundary(originalStream: NodeJS.ReadableStream) {
+    return new Promise((resolve, reject) => {
+        let buffer = Buffer.alloc(0);
+        let newlineFound = false;
+
+        // Clone the stream using PassThrough
+        const cloneStream = new PassThrough();
+        originalStream.pipe(cloneStream, { end: false }); // Important: don't end original
+
+        cloneStream.on('data', (chunk) => {
+            if (newlineFound) return; // already found
+
+            buffer = Buffer.concat([buffer, chunk]);
+
+            // Look for first newline
+            const newlineIndex = buffer.indexOf('\n');
+            if (newlineIndex === -1) return; // need more data
+
+            newlineFound = true;
+
+            // Extract first line
+            const firstLine = buffer.slice(0, newlineIndex).toString('utf8').trim();
+
+            if (!firstLine.startsWith('--')) {
+                return reject(new Error('Invalid multipart stream: first line must start with "--"'));
+            }
+
+            const boundary = firstLine.slice(2); // remove leading "--"
+            cloneStream.unpipe(); // stop cloning
+            cloneStream.destroy(); // destroy clone
+            resolve(boundary);
+        });
+
+        cloneStream.on('error', reject);
+        originalStream.on('error', reject);
+    });
+}
 
 export async function streamToBuffer(stream: NodeJS.ReadableStream) {
     return new Promise((resolve, reject) => {
@@ -264,8 +303,6 @@ export const boolean = () => createParser((value, path): boolean => {
     throw new ParsingError(`[${path}] cannot be converted to boolean`);
 })
 
-
-
 async function parseFormDataStream<T extends Record<string, unknown>>(
     stream: NodeJS.ReadableStream,
     shape: { [K in keyof T]: Parser<T[K]> },
@@ -276,9 +313,9 @@ async function parseFormDataStream<T extends Record<string, unknown>>(
     },
     path?: string
 ): Promise<T> {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
         const busboy = Busboy({
-            headers: (stream as any).headers || {},
+            headers: (stream as any).headers || {"content-type": `multipart/form-data; boundary=${await getBoundary(stream)}`},
             limits: {
                 fileSize: Infinity
             }

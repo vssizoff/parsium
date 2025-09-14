@@ -13,9 +13,12 @@
   "dependencies": {
     "@streamparser/json": "^0.0.22",
     "@types/busboy": "^1.5.4",
+    "@types/multiparty": "^4.2.1",
     "busboy": "^1.6.0",
     "crypto-random-string": "^5.0.0",
+    "form-data": "^4.0.4",
     "json-stream-es": "^1.2.1",
+    "multiparty": "^4.2.3",
     "stream-json": "^1.9.1"
   }
 }
