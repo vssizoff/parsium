@@ -9,13 +9,39 @@
 //
 // console.log(buffer()({}));
 
-import {int, object} from "./src/index.js";
-import FormData from "form-data";
+// import {int, object} from "./src/index.js";
+// import FormData from "form-data";
+//
+// let formdata = new FormData();
+//
+// formdata.append("test", "1");
+//
+// (async () => {
+//     console.log(await object({test: int()}).stream(formdata));
+// })();
 
-let formdata = new FormData();
+import {Writable, Readable, Transform} from "stream";
 
-formdata.append("test", "1");
+function test(stream: NodeJS.ReadableStream) {
 
-(async () => {
-    console.log(await object({test: int()}).stream(formdata));
-})();
+}
+
+// let stream = new Writable({
+//     write(chunk, encoding, callback) {
+//         callback();
+//     }
+// });
+let stream = new Transform({
+    transform(chunk, encoding, callback) {
+        this.push(chunk);
+        callback();
+    }
+});
+
+setInterval(() => {
+    stream.write('hello world!');
+}, 1000);
+
+stream.on("data", (chunk) => {
+    console.log(chunk);
+});
