@@ -177,11 +177,37 @@ export const buffer = () => createParser((value, path): Buffer => {
     throw new ParsingError(`[${path ?? ""}] cannot be converted to a Buffer`);
 });
 
-export const file = (options?: {max?: number}) => createParser((value, path): File => {
-    if (value instanceof RAMFile || value instanceof TempFile) return value;
+export const file = (options?: {max?: number, maxForRAM?: number, tempDir?: string}) => createParser((value, path): File => {
+    if (value instanceof RAMFile || value instanceof TempFile) {
+        if (options?.max && value.size > options?.max) throw new ParsingError(`[${path ?? ""}] is too large.`);
+        return value;
+    }
     let file = new RAMFile();
+    let buf = buffer()(value, path);
+    if (options?.max && buf.byteLength > options?.max) throw new ParsingError(`[${path ?? ""}] is too large.`);
     file.appendSync(buffer()(value, path));
     return file;
+}, parser => (stream, path): Promise<File> => {
+    return new Promise((resolve, reject) => {
+        let file: File = new RAMFile();
+
+        stream.on('data', (chunk: Buffer) => {
+            file.appendSync(chunk);
+            if (file.size > (options?.maxForRAM ?? 1024 * 1024) && file instanceof RAMFile) {
+                let path = Path.join(options?.tempDir ?? os.tmpdir(), encodeURIComponent(`${cryptoRandomString({length: 20, type: "url-safe"})}`));
+                file.saveSync(path);
+                file = new TempFile(path, file.size);
+            }
+        });
+
+        stream.on('end', () => {
+            resolve(parser(file));
+        });
+
+        stream.on('error', (err: Error) => {
+            reject(new ParsingError(`failed to read file [${path}}]: ${err.message}`));
+        });
+    });
 });
 
 export const string = (options: { min?: number; max?: number; pattern?: RegExp } = {}) => createParser((value, path): string => {
@@ -302,7 +328,7 @@ async function parseFormDataStream<T extends Record<string, unknown>>(
     shape: { [K in keyof T]: Parser<T[K]> },
     options: {
         ignoreUnknown?: boolean;
-        maxFileMemory?: number;
+        maxForRAM?: number;
         tempDir?: string;
     },
     path?: string
@@ -329,9 +355,8 @@ async function parseFormDataStream<T extends Record<string, unknown>>(
             let file: File = new RAMFile(info);
 
             fileStream.on('data', (chunk: Buffer) => {
-                console.log(file.size / 1024 / 1024 / 1024, file instanceof TempFile ? file.getPath() : null);
                 file.appendSync(chunk);
-                if (file.size > (options?.maxFileMemory ?? 1024 * 1024) && file instanceof RAMFile) {
+                if (file.size > (options?.maxForRAM ?? 1024 * 1024) && file instanceof RAMFile) {
                     let path = Path.join(options.tempDir ?? os.tmpdir(), encodeURIComponent(`${cryptoRandomString({length: 20, type: "url-safe"})}-${filename}`));
                     file.saveSync(path);
                     file = new TempFile(path, file.size, info);
