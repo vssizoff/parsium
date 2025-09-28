@@ -3,9 +3,10 @@ import * as fs from 'fs';
 import * as Path from 'path';
 import Busboy from 'busboy';
 import cryptoRandomString from "crypto-random-string";
-import { PassThrough } from 'stream';
+import {parseFormData} from "./formdata.js";
+import {Readable} from "node:stream";
 
-interface File {
+interface File extends Partial<Busboy.FileInfo> {
     size: number;
 
     append(buffer: Buffer): Promise<void>;
@@ -15,11 +16,22 @@ interface File {
     appendSync(buffer: Buffer): void;
     readSync(): Buffer;
     saveSync(path: string): void;
+
+    createReadStream(): NodeJS.ReadableStream;
 }
 
 class RAMFile implements File {
+    filename?: string;
+    encoding?: string;
+    mimeType?: string;
     public size: number = 0;
     private data: Buffer = Buffer.alloc(0);
+
+    constructor(fileInfo?: Busboy.FileInfo) {
+        this.filename = fileInfo?.filename;
+        this.encoding = fileInfo?.encoding;
+        this.mimeType = fileInfo?.mimeType;
+    }
 
     public async append(buffer: Buffer): Promise<void> {
         this.appendSync(buffer);
@@ -45,10 +57,22 @@ class RAMFile implements File {
     public saveSync(path: string): void {
         fs.writeFileSync(path, this.data);
     }
+
+    createReadStream(): NodeJS.ReadableStream {
+        return Readable.from(this.data);
+    }
 }
 
 class TempFile implements File {
-    constructor(private path: string, public size: number) {}
+    filename?: string;
+    encoding?: string;
+    mimeType?: string;
+
+    constructor(private path: string, public size: number, fileInfo?: Busboy.FileInfo) {
+        this.filename = fileInfo?.filename;
+        this.encoding = fileInfo?.encoding;
+        this.mimeType = fileInfo?.mimeType;
+    }
 
     public async append(buffer: Buffer): Promise<void> {
         this.size += buffer.byteLength;
@@ -75,6 +99,14 @@ class TempFile implements File {
     public saveSync(path: string): void {
         fs.copyFileSync(this.path, path);
     }
+
+    public getPath(): string {
+        return this.path;
+    }
+
+    createReadStream(): NodeJS.ReadableStream {
+        return fs.createReadStream(this.path);
+    }
 }
 
 export const anyField = Symbol("anyField");
@@ -91,44 +123,6 @@ export class ParsingError extends Error {
 export type RawParser<T> = (value: unknown, path?: string) => T;
 export type StreamParser<T> = (value: NodeJS.ReadableStream, path?: string) => Promise<T>;
 export type Parser<T> = RawParser<T> & {stream: StreamParser<T>};
-
-async function getBoundary(originalStream: NodeJS.ReadableStream) {
-    return new Promise((resolve, reject) => {
-        let buffer = Buffer.alloc(0);
-        let newlineFound = false;
-
-        // Clone the stream using PassThrough
-        const cloneStream = new PassThrough();
-        originalStream.pipe(cloneStream, { end: false }); // Important: don't end original
-
-        cloneStream.on('data', (chunk) => {
-            if (newlineFound) return; // already found
-
-            buffer = Buffer.concat([buffer, chunk]);
-
-            // Look for first newline
-            const newlineIndex = buffer.indexOf('\n');
-            if (newlineIndex === -1) return; // need more data
-
-            newlineFound = true;
-
-            // Extract first line
-            const firstLine = buffer.slice(0, newlineIndex).toString('utf8').trim();
-
-            if (!firstLine.startsWith('--')) {
-                return reject(new Error('Invalid multipart stream: first line must start with "--"'));
-            }
-
-            const boundary = firstLine.slice(2); // remove leading "--"
-            cloneStream.unpipe(); // stop cloning
-            cloneStream.destroy(); // destroy clone
-            resolve(boundary);
-        });
-
-        cloneStream.on('error', reject);
-        originalStream.on('error', reject);
-    });
-}
 
 export async function streamToBuffer(stream: NodeJS.ReadableStream) {
     return new Promise((resolve, reject) => {
@@ -314,39 +308,45 @@ async function parseFormDataStream<T extends Record<string, unknown>>(
     path?: string
 ): Promise<T> {
     return new Promise(async (resolve, reject) => {
-        const busboy = Busboy({
-            headers: (stream as any).headers || {"content-type": `multipart/form-data; boundary=${await getBoundary(stream)}`},
+        const [busboy, start] = await parseFormData(stream, {
             limits: {
                 fileSize: Infinity
             }
         });
 
         const fields: Record<string, any> = {};
-        const errors: Error[] = [];
+        const errors: Array<Error> = [];
 
         busboy.on('field', (fieldname: string, value: string) => {
-            fields[fieldname] = value;
+            if (fieldname in fields && Array.isArray(fields[fieldname])) fields[fieldname].push(value);
+            else if (fieldname in fields) fields[fieldname] = [fields[fieldname], value];
+            else fields[fieldname] = value;
         });
 
-        busboy.on('file', (fieldname: string, fileStream: NodeJS.ReadableStream, info: { filename: string; mimeType: string }) => {
+        busboy.on('file', (fieldname: string, fileStream: NodeJS.ReadableStream, info: Busboy.FileInfo) => {
             const {filename} = info;
 
-            let file: File = new RAMFile();
+            let file: File = new RAMFile(info);
 
-            fileStream.on('data', async (chunk: Buffer) => {
-                await file.append(chunk);
-                if (file.size > (options?.maxFileMemory ?? 256 * 1024 * 1024) && file instanceof RAMFile) {
-                    await file.save(Path.join(options.tempDir ?? os.tmpdir(), `${cryptoRandomString({length: 10, type: "url-safe"})}-${filename}`));
-
+            fileStream.on('data', (chunk: Buffer) => {
+                console.log(file.size / 1024 / 1024 / 1024, file instanceof TempFile ? file.getPath() : null);
+                file.appendSync(chunk);
+                if (file.size > (options?.maxFileMemory ?? 1024 * 1024) && file instanceof RAMFile) {
+                    let path = Path.join(options.tempDir ?? os.tmpdir(), encodeURIComponent(`${cryptoRandomString({length: 20, type: "url-safe"})}-${filename}`));
+                    file.saveSync(path);
+                    file = new TempFile(path, file.size, info);
                 }
             });
 
             fileStream.on('end', () => {
-                fields[fieldname] = file;
+                if (fieldname in fields && Array.isArray(fields[fieldname])) fields[fieldname].push(file);
+                else if (fieldname in fields) fields[fieldname] = [fields[fieldname], file];
+                else fields[fieldname] = file;
             });
 
             fileStream.on('error', (err: Error) => {
-                errors.push(new ParsingError(`failed to read file [${path}.${fieldname}]: ${err.message}`));
+                // errors.push(new ParsingError(`failed to read file [${path}.${fieldname}]: ${err.message}`));
+                errors.push(err);
             });
         });
 
@@ -356,7 +356,7 @@ async function parseFormDataStream<T extends Record<string, unknown>>(
 
         busboy.on('finish', () => {
             if (errors.length > 0) {
-                reject(errors[0]);
+                reject(errors);
                 return;
             }
 
@@ -367,7 +367,7 @@ async function parseFormDataStream<T extends Record<string, unknown>>(
             }
         });
 
-        stream.pipe(busboy);
+        start();
     });
 }
 
@@ -380,42 +380,98 @@ export const object = <T extends Record<string, unknown>>(
     } = { ignoreUnknown: true }
 ) => createParser((value, path): T => {
     if (typeof value === 'object' && value !== null && !(value instanceof Buffer)) {
-        const result: any = {};
+        const result: Partial<T> = {};
         const entries = Object.entries(value);
+        let errors: Array<ParsingError> = [];
 
         for (const [key, val] of entries) {
             if (key in shape) {
                 const parser = shape[key as keyof T];
-                result[key] = parser(val, `${path ?? ""}.${key}`);
+                try {
+                    result[key as keyof T] = parser(val, `${path ?? ""}.${key}`);
+                }
+                catch (error) {
+                    if (error instanceof ParsingError) errors.push(error);
+                }
             } else if (!options.ignoreUnknown) {
                 throw new ParsingError(`[${path ?? ""}.${key}] is not allowed`);
             }
         }
 
         for (const key in shape) {
-            if (!(key in value) && shape[key].name !== 'optional') {
-                throw new ParsingError(`[${path ?? ""}.${key}] is required`);
+            if (!(key in value)) {
+                if (Object.prototype.hasOwnProperty.call(shape, key)) {
+                    try {
+                        result[key as keyof T] = shape[key as keyof T](undefined, `${path ?? ""}.${key}`);
+                    } catch (error) {
+                        errors.push(new ParsingError(`[${path ?? ""}.${key}] is required`));
+                    }
+                }
             }
         }
 
-        return result;
+        if (errors.length > 0) {
+            throw new ParsingError(errors.map(error => error.message).join('\n'));
+        }
+        return result as T;
     }
 
     try {
         return object(shape, options)(JSON.parse(string()(value, path)), path);
-    }
-    catch (e) {}
+    } catch (e) {}
 
     throw new ParsingError(`[${path}] cannot be converted to an object`);
 }, parser => async (stream, path): Promise<T> => {
     try {
         return await parseFormDataStream(stream, shape, options, path);
-    }
-    catch (error) {
+    } catch (error) {
         if (error instanceof ParsingError) throw error;
         return parser(await streamToBuffer(stream), path);
     }
 });
+
+export const array = <T>(
+    parser: Parser<T>,
+    options: { min?: number; max?: number } = {}
+) => createParser((value, path): Array<T> => {
+    if (!Array.isArray(value)) {
+        try {
+            return array(parser, options)([value], path);
+        }
+        catch (error) {
+            throw new ParsingError(`[${path}] should be an array}`);
+        }
+    }
+
+    if (options.min !== undefined && value.length < options.min) {
+        throw new ParsingError(`[length(${path})] is less than the allowed minimum (${options.min})`);
+    }
+
+    if (options.max !== undefined && value.length > options.max) {
+        throw new ParsingError(`[length(${path})] is larger than the allowed maximum (${options.max})`);
+    }
+
+    let ret: Array<T> = [];
+    let errors: Array<ParsingError> = [];
+    value.forEach((item, index) => {
+        try {
+            ret.push(parser(item, `${path}[${index}]`));
+        }
+        catch (error) {
+            if (error instanceof ParsingError) errors.push(error);
+        }
+    });
+
+    if (errors.length > 0) {
+        try {
+            return array(parser, options)([value], path);
+        }
+        catch (error) {
+            throw new ParsingError(errors.map(error => error.message).join('\n'));
+        }
+    }
+    return ret;
+})
 
 // export const array = <T>(parser: Parser<T>, options: { min?: number; max?: number } = {}): Parser<T[]> =>
 //     (value, path) => {
@@ -525,48 +581,3 @@ export const object = <T extends Record<string, unknown>>(
 //         const parsed = parser(value, path);
 //         return transformer(parsed);
 //     };
-//
-// export const file = (
-//     options: {
-//         maxSizeForMemory?: number;
-//         tempDir?: string
-//     } = {}
-// ): Parser<string | Buffer> => {
-//     const maxSizeForMemory = options.maxSizeForMemory ?? 256 * 1024 * 1024; // 256MB по умолчанию
-//     const tempDir = options.tempDir ?? os.tmpdir();
-//
-//     return (value, path) => {
-//         if (value && typeof value === 'object' && 'filepath' in value) {
-//             const fileObj = value as {
-//                 filepath: string;
-//                 size: number;
-//                 originalname: string;
-//                 mimetype: string
-//             };
-//
-//             if (fileObj.size > maxSizeForMemory) {
-//                 return fileObj.filepath;
-//             } else {
-//                 return fs.readFileSync(fileObj.filepath);
-//             }
-//         }
-//
-//         if (typeof value === 'string' && value.startsWith('data:')) {
-//             const base64Data = value.split(',')[1];
-//             if (!base64Data) {
-//                 throw new ParsingError(`[${path}] недопустимый формат base64`);
-//             }
-//
-//             const buffer = Buffer.from(base64Data, 'base64');
-//
-//             if (buffer.length > maxSizeForMemory) {
-//                 const tempPath = Path.join(tempDir, `upload-${Date.now()}`);
-//                 fs.writeFileSync(tempPath, buffer);
-//                 return tempPath;
-//             }
-//             return buffer;
-//         }
-//
-//         throw new ParsingError(`[${path}] не является допустимым файлом или base64 строкой`);
-//     };
-// };

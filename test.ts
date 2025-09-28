@@ -25,6 +25,7 @@ import {FormData} from "formdata-node";
 import {Readable} from "node:stream";
 import {FormDataEncoder} from "form-data-encoder";
 import {parseFormData} from "./src/formdata.js";
+import {array, file, int, object, string} from "./src/index.js";
 
 class BlobFromStream {
     #stream;
@@ -62,11 +63,12 @@ async function parse(stream: NodeJS.ReadableStream) {
     const form = new FormData();
     form.append('name', 'John Doe');
     form.append('age', '30');
-    form.append('file', fileAsBlob("/home/sizoff/2025-05-25 10-02-22.mkv"), "2025-05-25 10-02-22.mkv");
+    form.append('file', fileAsBlob("/home/sizoff/2025-05-25 10-02-22.mkv"), "a/b/ю.mkv");
+    form.append('file', fileAsBlob("./src/index.ts"), "a/index.js");
 
     let stream = Readable.from(new FormDataEncoder(form));
 
-    await parse(stream);
+    // await parse(stream);
 
     // let body = Buffer.alloc(0);
     //
@@ -77,6 +79,12 @@ async function parse(stream: NodeJS.ReadableStream) {
     // stream.on('end', async () => {
     //     console.log('Form data as string:');
     //     console.log(body.toString());
-    //     await parse(Readable.from(body));
+    //     // await parse(Readable.from(body));
     // });
+
+    console.log(await object({
+        name: string(),
+        age: int(),
+        file: array(file())
+    }).stream(stream));
 })();
