@@ -34,7 +34,7 @@ export const file = (options?: {max?: number, maxForRAM?: number, tempDir?: stri
         });
 
         stream.on('error', (err: Error) => {
-            reject(new ParsingError(`failed to read file [${path}}]: ${err.message}`));
+            reject(new ParsingError(`failed to read file [${path ?? ""}]: ${err.message}`));
         });
     });
 });
@@ -86,7 +86,6 @@ async function parseFormDataStream<T extends Record<string, unknown>>(
             });
 
             fileStream.on('error', (err: Error) => {
-                // errors.push(new ParsingError(`failed to read file [${path}.${fieldname}]: ${err.message}`));
                 errors.push(err);
             });
         });
@@ -180,16 +179,16 @@ export const array = <T>(
             return array(parser, options)([value], path);
         }
         catch (error) {
-            throw new ParsingError(`[${path}] should be an array}`);
+            throw new ParsingError(`[${path ?? ""}] should be an array}`);
         }
     }
 
     if (options.min !== undefined && value.length < options.min) {
-        throw new ParsingError(`[length(${path})] is less than the allowed minimum (${options.min})`);
+        throw new ParsingError(`[length(${path ?? ""})] is less than the allowed minimum (${options.min})`);
     }
 
     if (options.max !== undefined && value.length > options.max) {
-        throw new ParsingError(`[length(${path})] is larger than the allowed maximum (${options.max})`);
+        throw new ParsingError(`[length(${path ?? ""})] is larger than the allowed maximum (${options.max})`);
     }
 
     let ret: Array<T> = [];
