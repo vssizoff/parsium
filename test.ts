@@ -20,32 +20,6 @@
 //     console.log(await object({test: int()}).stream(formdata));
 // })();
 
-// import {Writable, Readable, Transform} from "stream";
-//
-// function test(stream: NodeJS.ReadableStream) {
-//
-// }
-//
-// // let stream = new Writable({
-// //     write(chunk, encoding, callback) {
-// //         callback();
-// //     }
-// // });
-// let stream = new Transform({
-//     transform(chunk, encoding, callback) {
-//         this.push(chunk);
-//         callback();
-//     }
-// });
-//
-// setInterval(() => {
-//     stream.write('hello world!');
-// }, 1000);
-//
-// stream.on("data", (chunk) => {
-//     console.log(chunk);
-// });
-
 import fs from "node:fs";
 import {FormData} from "formdata-node";
 import {Readable} from "node:stream";
@@ -69,47 +43,40 @@ function fileAsBlob(path: string) {
     return new BlobFromStream(fs.createReadStream(path), fs.lstatSync(path).size);
 }
 
+async function parse(stream: NodeJS.ReadableStream) {
+    const [busboy, start] = await parseFormData(stream);
+
+    busboy.on("field", (name, value) => {
+        console.log(`Field: ${name}: ${value}`);
+    });
+    busboy.on("file", (name, fileStream, {filename}) => {
+        console.log(`File: ${name} (${filename})`);
+        let stream = fs.createWriteStream(`./test/${filename}`);
+        fileStream.pipe(stream);
+    });
+
+    start();
+}
+
 (async () => {
     const form = new FormData();
     form.append('name', 'John Doe');
     form.append('age', '30');
-    form.append('file', fileAsBlob("../bun.lock"), "formdata.ts");
+    form.append('file', fileAsBlob("/home/sizoff/2025-05-25 10-02-22.mkv"), "2025-05-25 10-02-22.mkv");
 
     let stream = Readable.from(new FormDataEncoder(form));
 
-    // parseMultipartFromStream(stream, (field, dataStream) => {
-    //     console.log('Field:', field);
+    await parse(stream);
+
+    // let body = Buffer.alloc(0);
     //
-    //     if (field.filename) {
-    //         console.log('File stream received:', field.filename);
-    //     } else {
-    //         console.log('Text field stream received:', field.name);
-    //         let value = '';
-    //         dataStream.on('data', chunk => value += chunk);
-    //         dataStream.on('end', () => console.log('Value:', value));
-    //     }
+    // stream.on('data', chunk => {
+    //     body = Buffer.concat([body, Buffer.from(chunk)]);
     // });
-
-    let body = Buffer.alloc(0);
-    stream.on('data', chunk => {
-        body = Buffer.concat([body, Buffer.from(chunk)]);
-    });
-
-    stream.on('end', async () => {
-        console.log('Form data as string:');
-        console.log(body.toString());
-        // parseMultipartFromStream(Readable.from(body), (field, dataStream) => {
-        //     console.log('Field:', field);
-        //
-        //     if (field.filename) {
-        //         console.log('File stream received:', field.filename);
-        //     } else {
-        //         console.log('Text field stream received:', field.name);
-        //         let value = '';
-        //         dataStream.on('data', chunk => value += chunk);
-        //         dataStream.on('end', () => console.log('Value:', value));
-        //     }
-        // });
-        const busboy = await parseFormData(Readable.from(body));
-    });
+    //
+    // stream.on('end', async () => {
+    //     console.log('Form data as string:');
+    //     console.log(body.toString());
+    //     await parse(Readable.from(body));
+    // });
 })();
