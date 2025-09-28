@@ -35,10 +35,10 @@ function parseOptions(options: Partial<FormDataParseOptions>): string | null {
     return null;
 }
 
-async function createBusBoy(boundary: string, stream: NodeJS.ReadableStream, searchBuffer: Buffer = Buffer.alloc(0)): Promise<[Busboy.Busboy, () => void]> {
+async function createBusBoy(boundary: string, busboyConfig: Busboy.BusboyConfig = {}, stream: NodeJS.ReadableStream, searchBuffer: Buffer = Buffer.alloc(0)): Promise<[Busboy.Busboy, () => void]> {
     // Create busboy with extracted boundary
     const headers = { 'content-type': `multipart/form-data; boundary=${boundary}` };
-    const busboy = Busboy({ headers });
+    const busboy = Busboy({ ...busboyConfig, headers });
 
     return [busboy, () => {
         // Write the buffered data to busboy
@@ -55,12 +55,13 @@ async function createBusBoy(boundary: string, stream: NodeJS.ReadableStream, sea
  * Uses busboy for parsing once the boundary is extracted.
  *
  * @param stream - The Node.js Readable stream containing the multipart/form-data body.
+ * @param busboyConfig - config for Busboy
  * @param options - Use it if you probably have a boundary. If parser cannot find boundary in options it will try to extract it from stream
  * @returns Busboy instance and a start function which will pipe stream to busboy
  */
-export function parseFormData(stream: NodeJS.ReadableStream, options: Partial<FormDataParseOptions> = {}): Promise<[Busboy.Busboy, () => void]> {
+export function parseFormData(stream: NodeJS.ReadableStream, busboyConfig: Busboy.BusboyConfig = {}, options: Partial<FormDataParseOptions> = {}): Promise<[Busboy.Busboy, () => void]> {
     let boundary = parseOptions(options);
-    if (boundary) return createBusBoy(boundary, stream);
+    if (boundary) return createBusBoy(boundary, busboyConfig, stream);
     return new Promise((resolve, reject) => {
         const buffers: Buffer[] = [];
         let totalLength = 0;
@@ -96,7 +97,7 @@ export function parseFormData(stream: NodeJS.ReadableStream, options: Partial<Fo
                         stream.removeListener('readable', onReadable);
                         stream.removeListener('error', reject);
 
-                        resolve(createBusBoy(boundary, stream, searchBuffer));
+                        resolve(createBusBoy(boundary, busboyConfig, stream, searchBuffer));
 
                         return;
                     } else {
