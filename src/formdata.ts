@@ -59,7 +59,7 @@ async function createBusBoy(boundary: string, busboyConfig: Busboy.BusboyConfig 
  * @param options - Use it if you probably have a boundary. If parser cannot find boundary in options it will try to extract it from stream
  * @returns Busboy instance and a start function which will pipe stream to busboy
  */
-export function parseFormData(stream: NodeJS.ReadableStream, busboyConfig: Busboy.BusboyConfig = {}, options: Partial<FormDataParseOptions> = {}): Promise<[Busboy.Busboy, () => void]> {
+export function readFormData(stream: NodeJS.ReadableStream, busboyConfig: Busboy.BusboyConfig = {}, options: Partial<FormDataParseOptions> = {}): Promise<[Busboy.Busboy, () => void]> {
     let boundary = parseOptions(options);
     if (boundary) return createBusBoy(boundary, busboyConfig, stream);
     return new Promise((resolve, reject) => {

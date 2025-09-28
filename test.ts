@@ -24,7 +24,7 @@ import fs from "node:fs";
 import {FormData} from "formdata-node";
 import {Readable} from "node:stream";
 import {FormDataEncoder} from "form-data-encoder";
-import {parseFormData} from "./src/formdata.js";
+import {readFormData} from "./src/formdata.js";
 import {array, file, int, object, string} from "./src/index.js";
 
 class BlobFromStream {
@@ -45,7 +45,7 @@ function fileAsBlob(path: string) {
 }
 
 async function parse(stream: NodeJS.ReadableStream) {
-    const [busboy, start] = await parseFormData(stream);
+    const [busboy, start] = await readFormData(stream);
 
     busboy.on("field", (name, value) => {
         console.log(`Field: ${name}: ${value}`);
