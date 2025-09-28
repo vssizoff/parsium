@@ -26,5 +26,6 @@
   },
   "scripts": {
     "prepack": "tsc"
-  }
+  },
+  "files": ["./src", "./dist", "./package.json", "./tsconfig.json"]
 }
