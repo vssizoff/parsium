@@ -6,7 +6,14 @@ import {buffer, string} from "./basic.js";
 import {readFormData} from "./formdata.js";
 import Busboy from "busboy";
 
-export const file = (options?: {max?: number, maxForRAM?: number, tempDir?: string}) => createParser((value, path): File => {
+export const file = (
+    options?: {
+        max?: number,
+        maxForRAM?: number,
+        tempDir?: string,
+        filename?: string
+    }
+) => createParser((value, path): File => {
     if (value instanceof RAMFile || value instanceof TempFile) {
         if (options?.max && value.size > options?.max) throw new ParsingError(`[${path ?? ""}] is too large.`);
         return value;
@@ -23,7 +30,7 @@ export const file = (options?: {max?: number, maxForRAM?: number, tempDir?: stri
         stream.on('data', (chunk: Buffer) => {
             file.appendSync(chunk);
             if (file.size > (options?.maxForRAM ?? 1024 * 1024) && file instanceof RAMFile) {
-                let path = Path.join(options?.tempDir ?? os.tmpdir(), encodeURIComponent(`${cryptoRandomString({length: 20, type: "url-safe"})}`));
+                let path = Path.join(options?.tempDir ?? os.tmpdir(), encodeURIComponent(cryptoRandomString({length: 20, type: "url-safe"}) + (options?.filename ? `-${options?.filename ?? ""}` : "")));
                 file.saveSync(path);
                 file = new TempFile(path, file.size);
             }
@@ -88,6 +95,9 @@ async function parseFormDataStream<T extends Record<string, unknown>>(
             fileStream.on('error', (err: Error) => {
                 errors.push(err);
             });
+
+            // let fileParser = file({maxForRAM: options.maxForRAM, tempDir: options.tempDir, filename: info.filename});
+            // fileParser.stream(fileStream, path);
         });
 
         busboy.on('error', (err: Error) => {
