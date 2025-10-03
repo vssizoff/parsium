@@ -12,6 +12,28 @@ Parsium is a lightweight parsing library for Node.js, designed as an alternative
 
 ---
 
+## Table of Contents
+
+- [Installation](#installation)
+- [Usage](#usage)
+    - [Basic Parsing](#basic-parsing)
+    - [Object Parsing](#object-parsing)
+    - [Stream Parsing](#stream-parsing)
+    - [Array Parsing](#array-parsing)
+    - [Utility Parsers](#utility-parsers)
+- [API Reference](#api-reference)
+    - [Base Types and Classes](#base-types-and-classes)
+    - [Basic Parsers](#basic-parsers)
+    - [Object and Array Parsers](#object-and-array-parsers)
+    - [Utility Parsers](#utility-parsers-1)
+    - [Form Data Handling](#form-data-handling)
+- [Examples](#examples)
+    - [Parsing JSON Body](#parsing-json-body)
+    - [Handling File Uploads via Stream](#handling-file-uploads-via-stream)
+    - [Composing Parsers](#composing-parsers)
+
+---
+
 ## Installation
 
 ```bash
@@ -22,7 +44,9 @@ Parsium exports a set of parser functions that can be composed to validate and p
 
 ---
 
-## Basic Parsing
+## Usage
+
+### Basic Parsing
 
 ```ts
 import { string, int, boolean } from 'parsium';
@@ -34,13 +58,13 @@ const isActive = boolean()(true); // true
 try {
   int()('invalid'); // Throws ParsingError
 } catch (err) {
-  console.error(err.message); // '[undefined] cannot be parsed as integer'
+  console.error(err.message); // '[] cannot be parsed as integer'
 }
 ```
 
 ---
 
-## Object Parsing
+### Object Parsing
 
 Define shapes for objects:
 
@@ -52,12 +76,12 @@ const userParser = object({
   age: int({ min: 18 }),
 });
 
-const user = userParser({ name: 'Jane', age: 30 }); // { name: 'Jane', age: 30 }
+const user = userParser('{ "name": "Jane", "age": 30 }'); // { name: 'Jane', age: 30 }
 ```
 
 ---
 
-## Stream Parsing
+### Stream Parsing
 
 Parsers support streaming inputs via the `.stream` method:
 
@@ -86,7 +110,7 @@ const parsedForm = await formParser.stream(req as IncomingMessage);
 
 ---
 
-## Array Parsing
+### Array Parsing
 
 ```ts
 import { array, int } from 'parsium';
@@ -96,7 +120,7 @@ const numbers = array(int(), { min: 1, max: 5 })([1, 2, 3]); // [1, 2, 3]
 
 ---
 
-## Utility Parsers
+### Utility Parsers
 
 ```ts
 import { optional, oneOf, uuid, email, transform } from 'parsium';
