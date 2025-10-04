@@ -186,10 +186,10 @@ export const array = <T>(
 ) => createParser((value, path): Array<T> => {
     if (!Array.isArray(value)) {
         try {
-            return array(parser, options)([value], path);
+            return [parser(value, `${path}[0]`)];
         }
         catch (error) {
-            throw new ParsingError(`[${path ?? ""}] should be an array}`);
+            throw new ParsingError(`[${path ?? ""}] should be an array`);
         }
     }
 
@@ -214,7 +214,7 @@ export const array = <T>(
 
     if (errors.length > 0) {
         try {
-            return array(parser, options)([value], path);
+            return [parser(value, `${path}[0]`)];
         }
         catch (error) {
             throw new ParsingError(errors.map(error => error.message).join('\n'));

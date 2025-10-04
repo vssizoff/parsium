@@ -70,7 +70,7 @@ export const int = (options: { min?: number; max?: number } = {}) => createParse
     }
     else {
         try {
-            numValue = parseInt(string()(value, path));
+            numValue = parseFloat(string()(value, path));
         }
         catch (error) {
             throw new ParsingError(`[${path ?? ""}] cannot be parsed as integer`);
@@ -78,7 +78,7 @@ export const int = (options: { min?: number; max?: number } = {}) => createParse
     }
 
     if (!Number.isInteger(numValue) || Number.isNaN(numValue)) {
-        throw new ParsingError(`[${path ?? ""}] should be an integer`);
+        throw new ParsingError(`[${path ?? ""}] cannot be parsed as integer`);
     }
 
     if (options.min !== undefined && numValue < options.min) {
@@ -107,7 +107,7 @@ export const float = (options: { min?: number; max?: number } = {}) => createPar
     }
 
     if (!Number.isFinite(numValue) || Number.isNaN(numValue)) {
-        throw new ParsingError(`[${path} ?? ""] should be an float`);
+        throw new ParsingError(`[${path ?? ""}] cannot be parsed as float`);
     }
 
     if (options.min !== undefined && numValue < options.min) {
