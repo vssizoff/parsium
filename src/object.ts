@@ -121,6 +121,22 @@ async function parseFormDataStream<T extends Record<string, unknown>>(
     });
 }
 
+function isFormdataStream(stream: NodeJS.ReadableStream): Promise<boolean> {
+    return new Promise(async (resolve) => {
+        stream.pause();
+
+        stream.once('readable', () => {
+            const firstChunk = stream.read();
+
+            if (firstChunk) {
+                stream.unshift(firstChunk);
+            }
+
+            resolve(!(firstChunk && firstChunk.toString().startsWith('{')));
+        });
+    });
+}
+
 export const object = <T extends Record<string, unknown>>(
     shape: { [K in keyof T]: Parser<T[K]> },
     options: {
@@ -172,10 +188,10 @@ export const object = <T extends Record<string, unknown>>(
 
     throw new ParsingError(`[${path}] cannot be converted to an object`);
 }, parser => async (stream, path): Promise<T> => {
-    try {
+    if (await isFormdataStream(stream)) {
         return await parseFormDataStream(stream, shape, options, path);
-    } catch (error) {
-        if (error instanceof ParsingError) throw error;
+    }
+    else {
         return parser(await streamToBuffer(stream), path);
     }
 });

@@ -123,8 +123,8 @@ export type Parser<T> = RawParser<T> & {stream: StreamParser<T>};
 export async function streamToBuffer(stream: NodeJS.ReadableStream) {
     return new Promise((resolve, reject) => {
         let data = Buffer.alloc(0);
-        stream.on('data', (chunk: Buffer) => {
-            data = Buffer.concat([data, chunk])
+        stream.on('data', (chunk: Buffer | string) => {
+            data = Buffer.concat([data, Buffer.from(chunk)])
         });
         stream.on('end', () => {
             resolve(data);
