@@ -28,7 +28,7 @@ export const buffer = () => createParser((value, path): Buffer => {
         return Buffer.from((value as any).data);
     }
 
-    throw new ParsingError(`[${path ?? ""}] cannot be converted to a Buffer`);
+    throw new ParsingError(`[${path ?? ""}] cannot be converted to a Buffer`, [{path, issue: "cannot be converted to a Buffer", rejectedValue: null}]);
 });
 
 export const string = (options: { min?: number; max?: number; pattern?: RegExp } = {}) => createParser((value, path): string => {
@@ -45,18 +45,18 @@ export const string = (options: { min?: number; max?: number; pattern?: RegExp }
             strValue = buffer()(value, path).toString();
         }
         catch (error) {
-            throw new ParsingError(`[${path ?? ""}] cannot be converted to a string`);
+            throw new ParsingError(`[${path ?? ""}] cannot be converted to a string`, [{path, issue: "cannot be converted to a string", rejectedValue: null}]);
         }
     }
 
     if (options.min !== undefined && strValue.length < options.min) {
-        throw new ParsingError(`[length(${path ?? ""})] is less than the allowed minimum (${options.min})`);
+        throw new ParsingError(`[length(${path ?? ""})] is less than the allowed minimum (${options.min})`, [{path, issue: `less than the allowed minimum (${options.min})`, rejectedValue: strValue.length}]);
     }
     if (options.max !== undefined && strValue.length > options.max) {
-        throw new ParsingError(`[length(${path ?? ""})] is larger than the allowed maximum (${options.max})`);
+        throw new ParsingError(`[length(${path ?? ""})] is larger than the allowed maximum (${options.max})`, [{path, issue: `larger than the allowed maximum (${options.max})`, rejectedValue: strValue.length}]);
     }
     if (options.pattern && !options.pattern.test(strValue)) {
-        throw new ParsingError(`[${path ?? ""}] doesn't match the pattern`);
+        throw new ParsingError(`[${path ?? ""}] doesn't match the pattern`, [{path, issue: `doesn't match the pattern`, rejectedValue: strValue}]);
     }
 
     return strValue;
@@ -73,19 +73,19 @@ export const int = (options: { min?: number; max?: number } = {}) => createParse
             numValue = parseFloat(string()(value, path));
         }
         catch (error) {
-            throw new ParsingError(`[${path ?? ""}] cannot be parsed as integer`);
+            throw new ParsingError(`[${path ?? ""}] cannot be parsed as integer`, [{path, issue: "cannot be parsed as integer", rejectedValue: null}]);
         }
     }
 
     if (!Number.isInteger(numValue) || Number.isNaN(numValue)) {
-        throw new ParsingError(`[${path ?? ""}] cannot be parsed as integer`);
+        throw new ParsingError(`[${path ?? ""}] cannot be parsed as integer`, [{path, issue: "cannot be parsed as integer", rejectedValue: null}]);
     }
 
     if (options.min !== undefined && numValue < options.min) {
-        throw new ParsingError(`[${path ?? ""}] is less than the allowed minimum (${options.min})`);
+        throw new ParsingError(`[${path ?? ""}] is less than the allowed minimum (${options.min})`, [{path, issue: `less than the allowed minimum (${options.min})`, rejectedValue: numValue}]);
     }
     if (options.max !== undefined && numValue > options.max) {
-        throw new ParsingError(`[${path ?? ""}] is larger than the allowed maximum (${options.max})`);
+        throw new ParsingError(`[${path ?? ""}] is larger than the allowed maximum (${options.max})`, [{path, issue: `larger than the allowed maximum (${options.max})`, rejectedValue: numValue}]);
     }
 
     return numValue;
@@ -102,19 +102,19 @@ export const float = (options: { min?: number; max?: number } = {}) => createPar
             numValue = parseFloat(string()(value, path));
         }
         catch (error) {
-            throw new ParsingError(`[${path ?? ""}] cannot be parsed as float`);
+            throw new ParsingError(`[${path ?? ""}] cannot be parsed as float`, [{path, issue: "cannot be parsed as float", rejectedValue: null}]);
         }
     }
 
     if (!Number.isFinite(numValue) || Number.isNaN(numValue)) {
-        throw new ParsingError(`[${path ?? ""}] cannot be parsed as float`);
+        throw new ParsingError(`[${path ?? ""}] cannot be parsed as float`, [{path, issue: "cannot be parsed as float", rejectedValue: null}]);
     }
 
     if (options.min !== undefined && numValue < options.min) {
-        throw new ParsingError(`[${path ?? ""}] is less than the allowed minimum (${options.min})`);
+        throw new ParsingError(`[${path ?? ""}] is less than the allowed minimum (${options.min})`, [{path, issue: `less than the allowed minimum (${options.min})`, rejectedValue: numValue}]);
     }
     if (options.max !== undefined && numValue > options.max) {
-        throw new ParsingError(`[${path ?? ""}] is larger than the allowed maximum (${options.max})`);
+        throw new ParsingError(`[${path ?? ""}] is larger than the allowed maximum (${options.max})`, [{path, issue: `larger than the allowed maximum (${options.max})`, rejectedValue: numValue}]);
     }
 
     return numValue;
@@ -141,5 +141,5 @@ export const boolean = () => createParser((value, path): boolean => {
         catch (error) {}
     }
 
-    throw new ParsingError(`[${path}] cannot be converted to boolean`);
+    throw new ParsingError(`[${path}] cannot be converted to boolean`, [{path, issue: "cannot be converted to boolean", rejectedValue: null}]);
 })
