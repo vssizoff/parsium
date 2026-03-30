@@ -15,12 +15,12 @@ export const file = (
     }
 ) => createParser((value, path): File => {
     if (value instanceof RAMFile || value instanceof TempFile) {
-        if (options?.max && value.size > options?.max) throw new ParsingError(`[${path ?? ""}] is too large.`);
+        if (options?.max && value.size > options?.max) throw new ParsingError(`[${path ?? ""}] is too large.`, [{path, issue: "too large", rejectedValue: value.size}]);
         return value;
     }
     let file = new RAMFile();
     let buf = buffer()(value, path);
-    if (options?.max && buf.byteLength > options?.max) throw new ParsingError(`[${path ?? ""}] is too large.`);
+    if (options?.max && buf.byteLength > options?.max) throw new ParsingError(`[${path ?? ""}] is too large.`, [{path, issue: "too large", rejectedValue: buf.byteLength}]);
     file.appendSync(buffer()(value, path));
     return file;
 }, parser => (stream, path): Promise<File> => {
@@ -41,7 +41,7 @@ export const file = (
         });
 
         stream.on('error', (err: Error) => {
-            reject(new ParsingError(`failed to read file [${path ?? ""}]: ${err.message}`));
+            reject(new ParsingError(`failed to read file [${path ?? ""}]: ${err.message}`, [{path, issue: "failed to read file " + err.message, rejectedValue: null}]));
         });
     });
 });
@@ -122,17 +122,54 @@ async function parseFormDataStream<T extends Record<string, unknown>>(
 }
 
 function isFormdataStream(stream: NodeJS.ReadableStream): Promise<boolean> {
-    return new Promise(async (resolve) => {
+    return new Promise((resolve) => {
+        const wasFlowing = (stream as any).readableFlowing;
         stream.pause();
 
-        stream.once('readable', () => {
-            const firstChunk = stream.read();
+        let resolved = false;
+        const cleanup = () => {
+            stream.removeListener('readable', handleReadable);
+            stream.removeListener('end', handleEnd);
+        };
 
-            if (firstChunk) {
-                stream.unshift(firstChunk);
+        const restoreFlowingState = () => {
+            if (wasFlowing === true) {
+                stream.resume();
+            }
+        };
+
+        const handleReadable = () => {
+            if (resolved) return;
+            const chunk = stream.read();
+
+            if (chunk === null) {
+                handleEnd();
+                return;
             }
 
-            resolve(!(firstChunk && firstChunk.toString().startsWith('{')));
+            stream.unshift(chunk);
+            resolved = true;
+            cleanup();
+            restoreFlowingState();
+            resolve(!chunk.toString().startsWith('{'));
+        };
+
+        const handleEnd = () => {
+            if (resolved) return;
+            resolved = true;
+            cleanup();
+            restoreFlowingState();
+            resolve(false);
+        };
+
+        stream.once('readable', handleReadable);
+        stream.once('end', handleEnd);
+
+        process.nextTick(() => {
+            if (resolved) return;
+            if ((stream as any).readableEnded) {
+                handleEnd();
+            }
         });
     });
 }
@@ -160,7 +197,7 @@ export const object = <T extends Record<string, unknown>>(
                     if (error instanceof ParsingError) errors.push(error);
                 }
             } else if (!options.ignoreUnknown) {
-                throw new ParsingError(`[${path ?? ""}.${key}] is not allowed`);
+                throw new ParsingError(`[${path ?? ""}.${key}] is not allowed`, [{path, issue: "not allowed", rejectedValue: key}]);
             }
         }
 
@@ -170,23 +207,30 @@ export const object = <T extends Record<string, unknown>>(
                     try {
                         result[key as keyof T] = shape[key as keyof T](undefined, `${path ?? ""}.${key}`);
                     } catch (error) {
-                        errors.push(new ParsingError(`[${path ?? ""}.${key}] is required`));
+                        errors.push(new ParsingError(`[${path ?? ""}.${key}] is required`, [{path, issue: "required", rejectedValue: key}]));
                     }
                 }
             }
         }
 
         if (errors.length > 0) {
-            throw new ParsingError(errors.map(error => error.message).join('\n'));
+            const fieldErrors: Array<{path: string | undefined, issue: string, rejectedValue: any}> = [];
+            errors.forEach(({fields}) => {
+                fieldErrors.push(...fields);
+            });
+            throw new ParsingError(errors.map(error => error.message).join('\n'), fieldErrors);
         }
         return result as T;
     }
 
+    let json = "";
     try {
-        return object(shape, options)(JSON.parse(string()(value, path)), path);
-    } catch (e) {}
+        json = JSON.parse(string()(value, path)); 
+    } catch (e) {
+        throw new ParsingError(`[${path}] cannot be converted to an object`, [{path, issue: "cannot be converted to an object", rejectedValue: null}]);
+    }
 
-    throw new ParsingError(`[${path}] cannot be converted to an object`);
+    return object(shape, options)(json, path);
 }, parser => async (stream, path): Promise<T> => {
     if (await isFormdataStream(stream)) {
         return await parseFormDataStream(stream, shape, options, path);
@@ -205,16 +249,16 @@ export const array = <T>(
             return [parser(value, `${path}[0]`)];
         }
         catch (error) {
-            throw new ParsingError(`[${path ?? ""}] should be an array`);
+            throw new ParsingError(`[${path ?? ""}] should be an array`, [{path, issue: "should be an array", rejectedValue: null}]);
         }
     }
 
     if (options.min !== undefined && value.length < options.min) {
-        throw new ParsingError(`[length(${path ?? ""})] is less than the allowed minimum (${options.min})`);
+        throw new ParsingError(`[length(${path ?? ""})] is less than the allowed minimum (${options.min})`, [{path, issue: `less than the allowed minimum (${options.min})`, rejectedValue: value.length}]);
     }
 
     if (options.max !== undefined && value.length > options.max) {
-        throw new ParsingError(`[length(${path ?? ""})] is larger than the allowed maximum (${options.max})`);
+        throw new ParsingError(`[length(${path ?? ""})] is larger than the allowed maximum (${options.max})`, [{path, issue: `larger than the allowed maximum (${options.max})`, rejectedValue: value.length}]);
     }
 
     let ret: Array<T> = [];
@@ -233,7 +277,11 @@ export const array = <T>(
             return [parser(value, `${path}[0]`)];
         }
         catch (error) {
-            throw new ParsingError(errors.map(error => error.message).join('\n'));
+            const fieldErrors: Array<{path: string | undefined, issue: string, rejectedValue: any}> = [];
+            errors.forEach(({fields}) => {
+                fieldErrors.push(...fields);
+            });
+            throw new ParsingError(errors.map(error => error.message).join('\n'), fieldErrors);
         }
     }
     return ret;

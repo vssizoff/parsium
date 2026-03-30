@@ -10,7 +10,7 @@ export const oneOf = <T extends readonly unknown[]>(
         }
     }
 
-    throw new ParsingError(`[${path ?? ""}] isn't equal to any of the expected values`);
+    throw new ParsingError(`[${path ?? ""}] isn't equal to any of the expected values`, [{path, issue: "isn't equal to any of the expected values", rejectedValue: null}]);
 });
 
 export const alternatives = <T extends readonly [...Parser<unknown>[]]>(
@@ -31,7 +31,12 @@ export const alternatives = <T extends readonly [...Parser<unknown>[]]>(
         }
     }
 
-    throw new ParsingError(`[${path}] doesn't match any of allowed alternatives:\n${errors.map(error => error.message).join('\n')}`);
+
+    const fieldErrors: Array<{path: string | undefined, issue: string, rejectedValue: any}> = [];
+    errors.forEach(({fields}) => {
+        fieldErrors.push(...fields);
+    });
+    throw new ParsingError(`[${path}] doesn't match any of allowed alternatives:\n${errors.map(error => error.message).join('\n')}`, fieldErrors);
 });
 
 export const optional = <T>(parser: Parser<T>
@@ -68,20 +73,20 @@ export const uuid = () => createParser((value, path) => {
     const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
     if (!uuidPattern.test(strValue)) {
-        throw new ParsingError(`[${path ?? ""}] is not a valid UUID`);
+        throw new ParsingError(`[${path ?? ""}] is not a valid UUID`, [{path, issue: "not a valid UUID", rejectedValue: strValue}]);
     }
 
     return strValue;
 });
 
-export const email = () => createParser((value, path) => {
-    const strValue = string()(value, path);
+export const email = (options: {min?: number, max?: number} = {}) => createParser((value, path) => {
+    const strValue = string(options)(value, path);
 
     // Email regex pattern
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
     if (!emailPattern.test(strValue)) {
-        throw new ParsingError(`[${path ?? ""}] is not a valid email`);
+        throw new ParsingError(`[${path ?? ""}] is not a valid email`, [{path, issue: "not a valid email", rejectedValue: strValue}]);
     }
 
     return strValue;
