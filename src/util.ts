@@ -36,12 +36,8 @@ export const alternatives = <T extends readonly [...Parser<unknown>[]]>(
 
 export const optional = <T>(parser: Parser<T>
 ) => createParser((value, path) => {
-    if (value === undefined) {
+    if (value === undefined || value === null) {
         return undefined;
-    }
-
-    if (value === null) {
-        return null;
     }
 
     return parser(value, path);
