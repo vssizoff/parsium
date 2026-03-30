@@ -110,7 +110,7 @@ export const anyField = Symbol("anyField");
 export class ParsingError extends Error {
     name = 'ParsingError';
 
-    constructor(message: string, public fields: Array<{path: string | undefined, issue: string, rejectedValue: any}>) {
+    constructor(message: string, public fields: Array<{path: string | undefined, issue: string, rejectedValue: any}> = []) {
         super(message);
         Object.setPrototypeOf(this, ParsingError.prototype);
     }

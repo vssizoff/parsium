@@ -197,7 +197,7 @@ export const object = <T extends Record<string, unknown>>(
                     if (error instanceof ParsingError) errors.push(error);
                 }
             } else if (!options.ignoreUnknown) {
-                throw new ParsingError(`[${path ?? ""}.${key}] is not allowed`, [{path, issue: "not allowed", rejectedValue: key}]);
+                throw new ParsingError(`[${path ?? ""}.${key}] is not allowed`, [{path: `${path ?? ""}.${key}`, issue: "not allowed", rejectedValue: key}]);
             }
         }
 
@@ -207,7 +207,7 @@ export const object = <T extends Record<string, unknown>>(
                     try {
                         result[key as keyof T] = shape[key as keyof T](undefined, `${path ?? ""}.${key}`);
                     } catch (error) {
-                        errors.push(new ParsingError(`[${path ?? ""}.${key}] is required`, [{path, issue: "required", rejectedValue: key}]));
+                        errors.push(new ParsingError(`[${path ?? ""}.${key}] is required`, [{path: `${path ?? ""}.${key}`, issue: "required", rejectedValue: key}]));
                     }
                 }
             }

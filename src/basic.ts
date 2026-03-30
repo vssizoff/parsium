@@ -50,10 +50,10 @@ export const string = (options: { min?: number; max?: number; pattern?: RegExp }
     }
 
     if (options.min !== undefined && strValue.length < options.min) {
-        throw new ParsingError(`[length(${path ?? ""})] is less than the allowed minimum (${options.min})`, [{path, issue: `less than the allowed minimum (${options.min})`, rejectedValue: strValue.length}]);
+        throw new ParsingError(`[length(${path ?? ""})] is less than the allowed minimum (${options.min})`, [{path, issue: `less than the allowed minimum (${options.min})`, rejectedValue: strValue}]);
     }
     if (options.max !== undefined && strValue.length > options.max) {
-        throw new ParsingError(`[length(${path ?? ""})] is larger than the allowed maximum (${options.max})`, [{path, issue: `larger than the allowed maximum (${options.max})`, rejectedValue: strValue.length}]);
+        throw new ParsingError(`[length(${path ?? ""})] is larger than the allowed maximum (${options.max})`, [{path, issue: `larger than the allowed maximum (${options.max})`, rejectedValue: strValue}]);
     }
     if (options.pattern && !options.pattern.test(strValue)) {
         throw new ParsingError(`[${path ?? ""}] doesn't match the pattern`, [{path, issue: `doesn't match the pattern`, rejectedValue: strValue}]);

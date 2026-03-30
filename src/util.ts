@@ -74,7 +74,7 @@ export const uuid = () => createParser((value, path) => {
     const strValue = string()(value, path);
 
     // UUID regex pattern (v1-v5)
-    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
     if (!uuidPattern.test(strValue)) {
         throw new ParsingError(`[${path ?? ""}] is not a valid UUID`, [{path, issue: "not a valid UUID", rejectedValue: strValue}]);
