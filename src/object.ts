@@ -198,6 +198,8 @@ export const object = <T extends Record<string, unknown>>(
                 }
             } else if (!options.ignoreUnknown) {
                 throw new ParsingError(`[${path ?? ""}.${key}] is not allowed`, [{path: `${path ?? ""}.${key}`, issue: "not allowed", rejectedValue: key}]);
+            } else {
+                result[key as keyof T] = val;
             }
         }
 
