@@ -251,7 +251,14 @@ export const array = <T>(
             return [parser(value, `${path}[0]`)];
         }
         catch (error) {
-            throw new ParsingError(`[${path ?? ""}] should be an array`, [{path, issue: "should be an array", rejectedValue: null}]);
+            let json = "";
+            try {
+                json = JSON.parse(string()(value, path));
+            }
+            catch (error) {
+                throw new ParsingError(`[${path ?? ""}] should be an array`, [{path, issue: "should be an array", rejectedValue: null}]);
+            }
+            return array(parser, options)(json, path);
         }
     }
 
